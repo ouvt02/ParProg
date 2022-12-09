@@ -46,16 +46,19 @@ int main(int argc, char **argv)
 
     printf("OpenMP: %ld mcs\n", clk() - start_time);
     
-    ff = fopen("result_omp.txt","w");
-    
-    for(int i = 0; i < ISIZE; i++)
+    if (argc < 2)
     {
-        for (int j = 0; j < JSIZE; j++)
+        ff = fopen("result_omp.txt","w");
+        
+        for(int i = 0; i < ISIZE; i++)
         {
-            fprintf(ff,"%f ",a[i][j]);
+            for (int j = 0; j < JSIZE; j++)
+            {
+                fprintf(ff,"%f ",a[i][j]);
+            }
+            fprintf(ff,"\n");
         }
-        fprintf(ff,"\n");
-    }
 
-    fclose(ff);
+        fclose(ff);
+    }
 }

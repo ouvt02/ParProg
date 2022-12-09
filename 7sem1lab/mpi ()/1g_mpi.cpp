@@ -1,8 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <mpi.h>
 #include <ctime>
+#include <mpi.h>
+
+#define ISIZE 5000
+#define JSIZE 5000
+
+#define FORWARDING 1
 
 long int clk()
 {
@@ -11,11 +16,6 @@ long int clk()
   long int time_ms = time.tv_sec * 1000 + time.tv_nsec / 1000000;
   return time_ms;
 }
-
-#define ISIZE 5000
-#define JSIZE 5000
-
-#define FORWARDING 1
 
 int main(int argc, char **argv)
 {
@@ -29,19 +29,17 @@ int main(int argc, char **argv)
     int start = rank * ISIZE / comm_size;
     int stop = (rank + 1) * ISIZE / comm_size - 1;
 
-    //printf("%d, %d\n", start, stop);
-
-    double** a = new double*[rank == 0 ? ISIZE : stop - start + 1];
-
+    double** a = new double*[rank == 0 ? ISIZE : stop - start + 2];
+    
     FILE *ff;
     long start_time;
-    //подготовительная часть – заполнение некими данными
-    for (int i = 0; i < stop - start + 1; i++)
+
+    for (int i = 0; i < stop - start + (rank == 0 ? 1 : 2); i++)
     {
         a[i] = new double[JSIZE];
         for (int j = 0; j < JSIZE; j++)
         {
-            a[i][j] = 10 * (i + start) + j;
+            a[i][j] = 10 * (i + start - (rank == 0 ? 0 : 1)) + j;
         }
     }
 
@@ -49,25 +47,29 @@ int main(int argc, char **argv)
     {
         for (int i = stop - start + 1; i < ISIZE; i++)
             a[i] = new double[JSIZE];
+
+        start_time = clk();
     }
 
-    // требуется обеспечить измерение времени работы данного цикла
-    if (rank == 0)
-        start_time = clk();
-
-    for (int i = 0; i < stop - start + 1; i++)
+    for (int j = 3; j < JSIZE - 1; j++)
     {
-        for (int j = 0; j < JSIZE; j++)
+        if (rank != 0 && j < JSIZE - 4)
+            MPI_Recv(&(a[0][j]), 1, MPI_DOUBLE, rank - 1, FORWARDING, MPI_COMM_WORLD, &status);
+
+        for (int i = 1; i < stop - start + (rank == 0 ? 1 : 2); i++)
         {
-            a[i][j] = sin(2 * a[i][j]);
+            a[i][j] = sin(2 * a[i - 1][j - 3]);
+            if (i == stop - start + (rank == 0 ? 0 : 1) && j < JSIZE - 4 && rank != comm_size - 1)
+                MPI_Send(&(a[i][j]), 1, MPI_DOUBLE, rank + 1, FORWARDING, MPI_COMM_WORLD);
         }
     }
-    
+
     if (rank != 0)
     {
-        for (int line = 0; line < stop - start + 1; line++)
+        for (int line = 1; line < stop - start + 2; line++)
             MPI_Send(a[line], JSIZE, MPI_DOUBLE, 0, FORWARDING, MPI_COMM_WORLD);
     }
+
 
     else 
     {
@@ -87,13 +89,14 @@ int main(int argc, char **argv)
     if (rank == 0 && argc < 2)
     {
         ff = fopen("result_mpi.txt","w");
-        
-        for(int i = 0; i < ISIZE; i++)
+    
+        for (int i = 0; i < ISIZE; i++)
         {
             for (int j = 0; j < JSIZE; j++)
             {
                 fprintf(ff,"%f ",a[i][j]);
             }
+
             fprintf(ff,"\n");
         }
 
@@ -101,6 +104,4 @@ int main(int argc, char **argv)
     }
 
     MPI_Finalize();
-
-    return 0;
 }
